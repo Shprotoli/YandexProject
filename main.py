@@ -1,13 +1,16 @@
 import sys
 import csv
+import os
 from datetime import datetime
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QVBoxLayout, QWidget, QPushButton,
-    QFileDialog, QLineEdit, QLabel, QFormLayout, QMessageBox
+    QFileDialog, QLineEdit, QFormLayout, QMessageBox, QLabel
 )
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtGui import QPixmap
 from psutil import net_io_counters
 
 from components import SystemMonitor
@@ -80,6 +83,7 @@ class SystemInfoApp(QMainWindow):
 
         self.init_ui()
         self.load_hardware_from_db()
+        self.load_avatar()
 
     def init_ui(self):
         self.tabs = QTabWidget()
@@ -89,6 +93,7 @@ class SystemInfoApp(QMainWindow):
         self.net_tab = SystemTab("Сеть", "Передача, КБ/с")
         self.settings_tab = self.create_settings_tab()
         self.hardware_tab = self.create_hardware_tab()
+        self.profile_tab = self.create_profile_tab()
 
         self.tabs.addTab(self.cpu_tab, "Процессор")
         self.tabs.addTab(self.mem_tab, "ОЗУ")
@@ -96,6 +101,7 @@ class SystemInfoApp(QMainWindow):
         self.tabs.addTab(self.net_tab, "Сеть")
         self.tabs.addTab(self.settings_tab, "Настройки")
         self.tabs.addTab(self.hardware_tab, "Оборудование")
+        self.tabs.addTab(self.profile_tab, "Профиль")
 
         self.export_button = QPushButton("Экспорт CSV")
         self.export_button.clicked.connect(self.export_csv)
@@ -116,6 +122,51 @@ class SystemInfoApp(QMainWindow):
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
+
+    def create_profile_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+
+        self.avatar_label = QLabel()
+        self.avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.avatar_label.setFixedSize(200, 200)
+        self.avatar_label.setStyleSheet("border: 2px dashed gray; border-radius: 10px;")
+
+        self.upload_button = QPushButton("Выбрать аватарку")
+        self.upload_button.clicked.connect(self.choose_avatar)
+
+        layout.addWidget(self.avatar_label)
+        layout.addWidget(self.upload_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        tab.setLayout(layout)
+        return tab
+
+    def choose_avatar(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Выбрать изображение", "", "Изображения (*.png *.jpg *.jpeg *.bmp)"
+        )
+        if filename:
+            self.save_avatar_path(filename)
+            self.show_avatar(filename)
+
+    def save_avatar_path(self, path):
+        with open("avatar.txt", "w", encoding="utf-8") as f:
+            f.write(path)
+
+    def load_avatar(self):
+        if os.path.exists("avatar.txt"):
+            with open("avatar.txt", "r", encoding="utf-8") as f:
+                path = f.read().strip()
+            if os.path.exists(path):
+                self.show_avatar(path)
+
+    def show_avatar(self, path):
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            QMessageBox.warning(self, "Ошибка", "Не удалось загрузить изображение.")
+            return
+        scaled = pixmap.scaled(200, 200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self.avatar_label.setPixmap(scaled)
+        self.avatar_label.setStyleSheet("border: none;")
 
     def save_hardware(self):
         cpu = self.cpu_name.text().strip()
