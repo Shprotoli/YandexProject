@@ -345,11 +345,34 @@ class SystemInfoApp(QMainWindow):
         filename, _ = QFileDialog.getOpenFileName(self, "Открыть CSV", "", "CSV Files (*.csv)")
         if not filename:
             return
+
+        imported_data = []
         with open(filename, mode="r", newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            imported_data = [dict(row) for row in reader]
+            for row in reader:
+                try:
+                    imported_data.append({
+                        "time": row["time"],
+                        "cpu": float(row["cpu"]),
+                        "memory": float(row["memory"]),
+                        "gpu": float(row["gpu"]),
+                        "network_kb": float(row["network_kb"])
+                    })
+                except ValueError as e:
+                    QMessageBox.warning(self, "Ошибка CSV", f"Некорректные данные в CSV: {e}")
+                    return
+
+        if not imported_data:
+            QMessageBox.warning(self, "Ошибка CSV", "Файл CSV пустой или некорректный")
+            return
+
         self.live_mode = False
         self.logged_data = imported_data
+
+        self.cpu_tab.set_data([row["cpu"] for row in self.logged_data])
+        self.mem_tab.set_data([row["memory"] for row in self.logged_data])
+        self.gpu_tab.set_data([row["gpu"] for row in self.logged_data])
+        self.net_tab.set_data([row["network_kb"] for row in self.logged_data])
 
     def save_to_db(self):
         if not self.logged_data:
