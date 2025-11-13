@@ -132,13 +132,11 @@ class SystemInfoApp(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Поле RAM должно быть числом!")
             return
 
-        # Сохраняем в БД
         SQLiteHandler.insert_hardware(cpu, gpu, ram_value, os_name)
 
         self.hardware_info = {"cpu": cpu, "gpu": gpu, "ram": ram_value, "os": os_name}
         self.update_tab_titles()
 
-        # Генерируем полезную аналитику
         advice = self.analyze_hardware(self.hardware_info)
 
         QMessageBox.information(
@@ -155,7 +153,6 @@ class SystemInfoApp(QMainWindow):
 
         messages = []
 
-        # RAM анализ
         if ram < 8:
             messages.append("Рекомендуется увеличить объём ОЗУ — меньше 8 ГБ может быть недостаточно.")
         elif ram < 16:
@@ -163,7 +160,6 @@ class SystemInfoApp(QMainWindow):
         else:
             messages.append("Отлично! Объём ОЗУ достаточен для большинства задач.")
 
-        # CPU анализ
         if "celeron" in cpu or "pentium" in cpu:
             messages.append("Ваш процессор начального уровня — производительность может быть ограничена.")
         elif "i5" in cpu or "ryzen 5" in cpu:
@@ -171,7 +167,6 @@ class SystemInfoApp(QMainWindow):
         elif "i7" in cpu or "ryzen 7" in cpu:
             messages.append("Мощный процессор — подходит для игр и работы.")
 
-        # GPU анализ
         if "gtx" in gpu or "rtx" in gpu or "radeon" in gpu:
             messages.append("Современная видеокарта подходит для большинства задач.")
         elif gpu:
@@ -179,7 +174,6 @@ class SystemInfoApp(QMainWindow):
         else:
             messages.append("GPU не указана.")
 
-        # ОС анализ
         if "win" in os_name:
             messages.append("Используется Windows — большинство приложений будет совместимо.")
         elif "linux" in os_name:
