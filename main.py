@@ -117,6 +117,78 @@ class SystemInfoApp(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
+    def save_hardware(self):
+        cpu = self.cpu_name.text().strip()
+        gpu = self.gpu_name.text().strip()
+        ram = self.ram_size.text().strip()
+        os_name = self.os_name.text().strip()
+        if not (cpu and gpu and ram and os_name):
+            QMessageBox.warning(self, "Ошибка", "Заполните все поля!")
+            return
+
+        try:
+            ram_value = float(ram)
+        except ValueError:
+            QMessageBox.warning(self, "Ошибка", "Поле RAM должно быть числом!")
+            return
+
+        # Сохраняем в БД
+        SQLiteHandler.insert_hardware(cpu, gpu, ram_value, os_name)
+
+        self.hardware_info = {"cpu": cpu, "gpu": gpu, "ram": ram_value, "os": os_name}
+        self.update_tab_titles()
+
+        # Генерируем полезную аналитику
+        advice = self.analyze_hardware(self.hardware_info)
+
+        QMessageBox.information(
+            self,
+            "Профиль сохранён",
+            f"Данные оборудования успешно сохранены!\n\n{advice}"
+        )
+
+    def analyze_hardware(self, info):
+        ram = info.get("ram", 0)
+        cpu = info.get("cpu", "").lower()
+        gpu = info.get("gpu", "").lower()
+        os_name = info.get("os", "").lower()
+
+        messages = []
+
+        # RAM анализ
+        if ram < 8:
+            messages.append("Рекомендуется увеличить объём ОЗУ — меньше 8 ГБ может быть недостаточно.")
+        elif ram < 16:
+            messages.append("ОЗУ на уровне нормы, но для тяжёлых задач стоит рассмотреть 16+ ГБ.")
+        else:
+            messages.append("Отлично! Объём ОЗУ достаточен для большинства задач.")
+
+        # CPU анализ
+        if "celeron" in cpu or "pentium" in cpu:
+            messages.append("Ваш процессор начального уровня — производительность может быть ограничена.")
+        elif "i5" in cpu or "ryzen 5" in cpu:
+            messages.append("Хороший баланс мощности и эффективности.")
+        elif "i7" in cpu or "ryzen 7" in cpu:
+            messages.append("Мощный процессор — подходит для игр и работы.")
+
+        # GPU анализ
+        if "gtx" in gpu or "rtx" in gpu or "radeon" in gpu:
+            messages.append("Современная видеокарта подходит для большинства задач.")
+        elif gpu:
+            messages.append("Видеокарта не определена как игровая — возможны ограничения.")
+        else:
+            messages.append("GPU не указана.")
+
+        # ОС анализ
+        if "win" in os_name:
+            messages.append("Используется Windows — большинство приложений будет совместимо.")
+        elif "linux" in os_name:
+            messages.append("Linux — отличная стабильность и безопасность.")
+        elif "mac" in os_name:
+            messages.append("macOS — надёжная система, но ограниченная совместимость.")
+
+        return "\n".join(messages)
+
     def create_settings_tab(self):
         tab = QWidget()
         layout = QFormLayout()
@@ -155,20 +227,6 @@ class SystemInfoApp(QMainWindow):
             return
         SQLiteHandler.insert_setting(name, value)
         QMessageBox.information(self, "OK", "Настройка сохранена!")
-
-    def save_hardware(self):
-        cpu = self.cpu_name.text().strip()
-        gpu = self.gpu_name.text().strip()
-        ram = self.ram_size.text().strip()
-        os_name = self.os_name.text().strip()
-        if not (cpu and gpu and ram and os_name):
-            QMessageBox.warning(self, "Ошибка", "Заполните все поля!")
-            return
-        SQLiteHandler.insert_hardware(cpu, gpu, float(ram), os_name)
-        QMessageBox.information(self, "OK", "Данные оборудования сохранены!")
-
-        self.hardware_info = {"cpu": cpu, "gpu": gpu, "ram": ram, "os": os_name}
-        self.update_tab_titles()
 
     def load_hardware_from_db(self):
         hw_list = SQLiteHandler.fetch_hardware()
