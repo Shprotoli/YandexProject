@@ -1,14 +1,17 @@
 import sys
 import csv
+from datetime import datetime
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from datetime import datetime
-
-from PyQt6.QtWidgets import QApplication, QMainWindow, QTabWidget, QVBoxLayout, QWidget, QPushButton, QFileDialog
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QTabWidget, QVBoxLayout, QWidget, QPushButton,
+    QFileDialog, QLineEdit, QLabel, QFormLayout, QMessageBox
+)
 from PyQt6.QtCore import QTimer
 from psutil import net_io_counters
 
 from components import SystemMonitor
+from db import SQLiteHandler
 
 
 class LivePlot(QWidget):
@@ -58,43 +61,22 @@ class SystemTab(QWidget):
         self.plot.set_data(values)
 
 
-class CSVHandler:
-    @staticmethod
-    def export(filename, data):
-        with open(filename, mode="w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["time", "cpu", "memory", "gpu", "network_kb"])
-            writer.writeheader()
-            for row in data:
-                writer.writerow(row)
-
-    @staticmethod
-    def import_file(filename):
-        imported_data = []
-        with open(filename, mode="r", newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                imported_data.append({
-                    "time": row["time"],
-                    "cpu": float(row["cpu"]),
-                    "memory": float(row["memory"]),
-                    "gpu": float(row["gpu"]),
-                    "network_kb": float(row["network_kb"])
-                })
-        return imported_data
-
-
 class SystemInfoApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        SQLiteHandler.init_db()
         self.setWindowTitle("Менеджер ресурсов")
-        self.setGeometry(300, 200, 800, 500)
+        self.setGeometry(300, 200, 900, 600)
+
         self.monitor = SystemMonitor()
         self.last_net = net_io_counters()
         self.logged_data = []
         self.live_mode = True
+
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_stats)
         self.timer.start(5000)
+
         self.init_ui()
 
     def init_ui(self):
@@ -103,28 +85,91 @@ class SystemInfoApp(QMainWindow):
         self.mem_tab = SystemTab("Оперативная память", "Использование, %")
         self.gpu_tab = SystemTab("Видеокарта", "Загрузка, %")
         self.net_tab = SystemTab("Сеть", "Передача, КБ/с")
+        self.settings_tab = self.create_settings_tab()
+        self.hardware_tab = self.create_hardware_tab()
 
         self.tabs.addTab(self.cpu_tab, "Процессор")
-        self.tabs.addTab(self.mem_tab, "Оперативная память")
-        self.tabs.addTab(self.gpu_tab, "Видеокарта")
+        self.tabs.addTab(self.mem_tab, "ОЗУ")
+        self.tabs.addTab(self.gpu_tab, "GPU")
         self.tabs.addTab(self.net_tab, "Сеть")
+        self.tabs.addTab(self.settings_tab, "Настройки")
+        self.tabs.addTab(self.hardware_tab, "Оборудование")
 
         self.export_button = QPushButton("Экспорт CSV")
         self.export_button.clicked.connect(self.export_csv)
-        self.import_button = QPushButton("Загрузить CSV")
+        self.import_button = QPushButton("Импорт CSV")
         self.import_button.clicked.connect(self.import_csv)
-        self.live_button = QPushButton("Возврат к live")
+        self.save_db_button = QPushButton("Сохранить в БД")
+        self.save_db_button.clicked.connect(self.save_to_db)
+        self.live_button = QPushButton("Live режим")
         self.live_button.clicked.connect(self.return_to_live)
 
         layout = QVBoxLayout()
         layout.addWidget(self.tabs)
         layout.addWidget(self.export_button)
         layout.addWidget(self.import_button)
+        layout.addWidget(self.save_db_button)
         layout.addWidget(self.live_button)
 
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
+
+    def create_settings_tab(self):
+        tab = QWidget()
+        layout = QFormLayout()
+
+        self.setting_name = QLineEdit()
+        self.setting_value = QLineEdit()
+        save_button = QPushButton("Сохранить настройку")
+        save_button.clicked.connect(self.save_setting)
+
+        layout.addRow("Название:", self.setting_name)
+        layout.addRow("Значение:", self.setting_value)
+        layout.addRow(save_button)
+
+        tab.setLayout(layout)
+        return tab
+
+    def create_hardware_tab(self):
+        tab = QWidget()
+        layout = QFormLayout()
+
+        self.cpu_name = QLineEdit()
+        self.gpu_name = QLineEdit()
+        self.ram_size = QLineEdit()
+        self.os_name = QLineEdit()
+        save_button = QPushButton("Сохранить оборудование")
+        save_button.clicked.connect(self.save_hardware)
+
+        layout.addRow("CPU:", self.cpu_name)
+        layout.addRow("GPU:", self.gpu_name)
+        layout.addRow("RAM (ГБ):", self.ram_size)
+        layout.addRow("ОС:", self.os_name)
+        layout.addRow(save_button)
+
+        tab.setLayout(layout)
+        return tab
+
+    def save_setting(self):
+        name = self.setting_name.text().strip()
+        value = self.setting_value.text().strip()
+        if not name or not value:
+            QMessageBox.warning(self, "Ошибка", "Введите имя и значение настройки!")
+            return
+        SQLiteHandler.insert_setting(name, value)
+        QMessageBox.information(self, "OK", "Настройка сохранена!")
+
+    def save_hardware(self):
+        cpu = self.cpu_name.text().strip()
+        gpu = self.gpu_name.text().strip()
+        ram = self.ram_size.text().strip()
+        os_name = self.os_name.text().strip()
+        if not (cpu and gpu and ram and os_name):
+            QMessageBox.warning(self, "Ошибка", "Заполните все поля!")
+            return
+        SQLiteHandler.insert_hardware(cpu, gpu, float(ram), os_name)
+        QMessageBox.information(self, "OK", "Данные оборудования сохранены!")
 
     def update_stats(self):
         if not self.live_mode:
@@ -166,22 +211,31 @@ class SystemInfoApp(QMainWindow):
     def export_csv(self):
         filename, _ = QFileDialog.getSaveFileName(self, "Сохранить CSV", "", "CSV Files (*.csv)")
         if filename:
-            CSVHandler.export(filename, self.logged_data)
+            with open(filename, mode="w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=["time", "cpu", "memory", "gpu", "network_kb"])
+                writer.writeheader()
+                writer.writerows(self.logged_data)
 
     def import_csv(self):
         filename, _ = QFileDialog.getOpenFileName(self, "Открыть CSV", "", "CSV Files (*.csv)")
         if not filename:
             return
-        imported_data = CSVHandler.import_file(filename)
+        with open(filename, mode="r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            imported_data = [dict(row) for row in reader]
         self.live_mode = False
         self.logged_data = imported_data
-        self.cpu_tab.set_data([d["cpu"] for d in imported_data])
-        self.mem_tab.set_data([d["memory"] for d in imported_data])
-        self.gpu_tab.set_data([d["gpu"] for d in imported_data])
-        self.net_tab.set_data([d["network_kb"] for d in imported_data])
+
+    def save_to_db(self):
+        if not self.logged_data:
+            return
+        for row in self.logged_data:
+            SQLiteHandler.insert_usage(row)
+        QMessageBox.information(self, "OK", "Данные мониторинга сохранены в БД!")
 
     def return_to_live(self):
         self.live_mode = True
+        self.logged_data = []
 
 
 if __name__ == "__main__":
