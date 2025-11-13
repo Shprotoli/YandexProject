@@ -385,6 +385,11 @@ class SystemInfoApp(QMainWindow):
         self.live_mode = True
         self.logged_data = []
 
+        self.cpu_tab.set_data([])
+        self.mem_tab.set_data([])
+        self.gpu_tab.set_data([])
+        self.net_tab.set_data([])
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
