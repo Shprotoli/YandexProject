@@ -72,12 +72,14 @@ class SystemInfoApp(QMainWindow):
         self.last_net = net_io_counters()
         self.logged_data = []
         self.live_mode = True
+        self.hardware_info = {}
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_stats)
         self.timer.start(5000)
 
         self.init_ui()
+        self.load_hardware_from_db()
 
     def init_ui(self):
         self.tabs = QTabWidget()
@@ -118,36 +120,30 @@ class SystemInfoApp(QMainWindow):
     def create_settings_tab(self):
         tab = QWidget()
         layout = QFormLayout()
-
         self.setting_name = QLineEdit()
         self.setting_value = QLineEdit()
         save_button = QPushButton("Сохранить настройку")
         save_button.clicked.connect(self.save_setting)
-
         layout.addRow("Название:", self.setting_name)
         layout.addRow("Значение:", self.setting_value)
         layout.addRow(save_button)
-
         tab.setLayout(layout)
         return tab
 
     def create_hardware_tab(self):
         tab = QWidget()
         layout = QFormLayout()
-
         self.cpu_name = QLineEdit()
         self.gpu_name = QLineEdit()
         self.ram_size = QLineEdit()
         self.os_name = QLineEdit()
         save_button = QPushButton("Сохранить оборудование")
         save_button.clicked.connect(self.save_hardware)
-
         layout.addRow("CPU:", self.cpu_name)
         layout.addRow("GPU:", self.gpu_name)
         layout.addRow("RAM (ГБ):", self.ram_size)
         layout.addRow("ОС:", self.os_name)
         layout.addRow(save_button)
-
         tab.setLayout(layout)
         return tab
 
@@ -170,6 +166,32 @@ class SystemInfoApp(QMainWindow):
             return
         SQLiteHandler.insert_hardware(cpu, gpu, float(ram), os_name)
         QMessageBox.information(self, "OK", "Данные оборудования сохранены!")
+
+        self.hardware_info = {"cpu": cpu, "gpu": gpu, "ram": ram, "os": os_name}
+        self.update_tab_titles()
+
+    def load_hardware_from_db(self):
+        hw_list = SQLiteHandler.fetch_hardware()
+        if not hw_list:
+            return
+        latest = hw_list[-1]
+        self.hardware_info = latest
+        self.cpu_name.setText(latest["cpu"])
+        self.gpu_name.setText(latest["gpu"])
+        self.ram_size.setText(str(latest["ram"]))
+        self.os_name.setText(latest["os"])
+        self.update_tab_titles()
+
+    def update_tab_titles(self):
+        cpu_title = f"Процессор ({self.hardware_info.get('cpu', '')})" if self.hardware_info.get("cpu") else "Процессор"
+        gpu_title = f"Видеокарта ({self.hardware_info.get('gpu', '')})" if self.hardware_info.get(
+            "gpu") else "Видеокарта"
+        self.cpu_tab.plot.ax.set_title(cpu_title)
+        self.gpu_tab.plot.ax.set_title(gpu_title)
+        self.tabs.setTabText(0, cpu_title)
+        self.tabs.setTabText(2, gpu_title)
+        self.cpu_tab.plot.canvas.draw_idle()
+        self.gpu_tab.plot.canvas.draw_idle()
 
     def update_stats(self):
         if not self.live_mode:
